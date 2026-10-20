@@ -1,230 +1,137 @@
-# hermes-dist
+# relay-bridge-demo
 
-> Distribution bundle for a hardened, distribution-safe [Hermes Agent](https://hermes-agent.nousresearch.com/docs) build.
-> Ships what end users install, plus the operator-side relay that receives HMAC-signed events from those installs.
+> A demonstrative relay bridge between a **cloud backend** (server side) and a
+> **business-enterprise app written in C** (client side) — built to be shown,
+> not shipped. Repo started as a fork of `hermes-dist`; the old distribution
+> content now lives under [`legacy/old-hermes-dist/`](legacy/old-hermes-dist/).
 
-[![License: Internal PoC](https://img.shields.io/badge/license-Internal%20PoC-red)](#license)
-[![Status: v0.5.0 WIP](https://img.shields.io/badge/status-v0.5.0--WIP-yellow)](CHANGELOG.md)
-[![Branch: device/desktop](https://img.shields.io/badge/branch-device%2Fdesktop-blue)](#development-branches)
-
-This repo is what end users clone or run the installer from. It contains three things, and only three things:
-
-- **`default-template/`** — the user-facing profile bundle (the only profile a user receives; sanitized for distribution)
-- **`relay/`** — the FastAPI collector that receives signed events from user installs
-- **`docs/`** — architecture, security model, and operator runbook
-
-Live runtime state (per-profile databases, encrypted snapshots, browser cache, runtime logs, raw `.env` secrets) is **never** tracked here. It lives on disk under `$HERMES_HOME` and is backed up separately via an out-of-band encrypted-snapshot mechanism. See [docs/SECURITY.md](docs/SECURITY.md) for the full threat model.
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](#license)
+[![Status: demo](https://img.shields.io/badge/status-demo-blue)](#what-this-demonstrates)
+[![Client: C (WinSock)](https://img.shields.io/badge/client-C%20(WinSock)-orange)](#)
+[![Server: Python stdlib](https://img.shields.io/badge/server-Python%20stdlib-4B8BBE)](#)
 
 ---
 
-## Who is this for?
+## What this demonstrates
 
-| If you are… | You want |
-|---|---|
-| An **operator** running your own multi-user Hermes install | This repo. You clone it, run `.onboard.sh` / `install-windows.ps1`, stand up the relay on your own hardware (Tailscale-reachable, no public IP). |
-| An **end user** who got a one-liner install command from an operator | You want the operator's fork of this repo, not this one. Run `hermes install --from <operator-fork>` and stop reading. |
-| A **Hermes contributor** proposing upstream changes | You want [Somewhatmilk/hermes-agent](https://github.com/Somewhatmilk/hermes-agent), not this repo. This is the *distribution layer* on top of agent core. |
-| A **security reviewer** auditing the denylist / hook layer | Start at [docs/SECURITY.md](docs/SECURITY.md), then read `default-template/security/denylist.yaml` and `default-template/hooks/pre-tool.sh`. |
+The story this demo tells is a **cloud → business-enterprise** connection:
 
----
+1. A **business enterprise app** — represented by `fake_webui.exe`, a real
+   single-file C program that speaks HTTP over WinSock — tries to reach a
+   corporate backend.
+2. The request crosses a **relay bridge**: an explicit, observable junction
+   between the enterprise network and the cloud side. The bridge is the
+   boundary where a real deployment would enforce auth, quotas and routing;
+   this demo models the boundary so a viewer can see what flows across it.
+3. The **cloud side** — `server/fake_server.py`, a tiny stdlib-only Python
+   HTTP server — accepts the client's handshake event, stores nothing,
+   and echoes a confirmation (`event_id`, server time, echo of the payload).
 
-## Prerequisites
+What a **viewer sees** when they run it: the C client opens a connection,
+sends `client.connected` as its first event, probes `/health` and `/ping`,
+and prints an ASCII console UI with the connection status box, an event log
+with timestamps, and per-request latency. The cloud terminal shows each
+request with `200 OK` lines and the payload.
 
-### For the operator (running the relay)
-
-| Requirement | Why | How to verify |
-|---|---|---|
-| **OS:** Windows 10/11, macOS 12+, or Linux (Ubuntu 22.04+ tested) | Install scripts target these | `uname -a` / `winver` |
-| **GitHub account** with `repo` scope on a fork of this repo | End users pull from your fork via `hermes install --from <fork>` | `gh auth status` |
-| **Docker Desktop** (or Docker Engine on Linux) | The relay container is the only piece that runs as a service | `docker --version` |
-| **Tailscale account** (free tier is fine) | Provides `<host>.tail.ts.net` so users reach the relay without a public IP | `tailscale ip -4` returns a `100.x.x.x` |
-| **Python 3.11+** with `pip` | The relay is FastAPI; the `default-template` scripts are bash/PowerShell | `python --version` |
-| **HMAC signing keypair** (auto-generated on first onboard) | Used to sign payloads between users and your relay | Auto-created at `~/.hermes/.operator-token` |
-
-### For end users
-
-| Requirement | Why |
-|---|---|
-| **OS:** Windows 10/11, macOS 12+, or Linux | The default profile ships with hooks that assume these shells |
-| **Git** | The first-launch bootstrap clones the user's profile tree from your fork |
-| **No shell access** by default | The `terminal` toolset is intentionally disabled in shipped installs — the operator's security policy |
-| **No sandbox escape** — pre-tool hook blocks writes outside the working dir | See [docs/SECURITY.md](docs/SECURITY.md) § "Pre-tool hook" |
-
-### Tokens you'll need to provision
-
-1. **GitHub Personal Access Token (classic)** with `repo` scope on your fork — used by the relay's webhook handler if you wire GitHub event ingestion. Provision via `gh auth login` or GitHub → Settings → Developer settings → PAT.
-2. **Tailscale auth key** (optional, only if you don't want to do `tailscale up` interactively) — `tailscale up --authkey <tskey-auth-xxxxx>`. Free tier is fine.
-3. **Operator HMAC token** — auto-generated by `.onboard.sh` / `install-windows.ps1` on first run. Persisted at `~/.hermes/.operator-token` (chmod 600). **Do not commit this token.** The relay rejects requests without a valid HMAC signature.
-4. **Per-user UUIDs** — auto-generated by `scripts/uuidgen.sh` during install. Each user install gets a unique UUID; the relay uses it as the primary key in the `registry` table.
-
-**Token rotation:** rotate the operator token via `./relay/tests/rotate-token.sh` (re-signs all in-flight payloads). Rotate GitHub PATs quarterly per GitHub's recommendation.
+It is intentionally a *fake*: no TLS, no auth, no persistence — both sides
+are stand-ins. The point is the *shape* of the bridge and the two-line
+startup, not production machinery.
 
 ---
 
-## Quick start (operator — 5 minutes)
+## Quick start
 
 ```bash
-# 0. Prereqs already installed (Docker, Tailscale, Python 3.11+, gh CLI)
+# 1. start the cloud side
+python3 server/fake_server.py
 
-# 1. Clone and fork
-gh repo fork Somewhatmilk/hermes-dist --clone --remote
-cd hermes-dist
-
-# 2. Local dry-test (no GitHub, no remote server)
-./relay/tests/dry-run.sh
-#    builds the relay Docker, fires a signed test event,
-#    writes the operator token to relay/.operator-token-test
-
-# 3. Bring Tailscale up (interactive browser sign-in OK)
-tailscale up
-tailscale ip -4                           # confirm 100.x.x.x + MagicDNS name
-
-# 4. Deploy the relay to a local Docker container bound to 127.0.0.1:9119
-cd relay
-docker build -t hermes-relay:latest .
-docker run -d --name hermes-relay --restart unless-stopped \
-  -p 127.0.0.1:9119:9119 \
-  -e OPERATOR_TOKEN="$(cat .operator-token-test)" \
-  -v hermes-relay-data:/var/lib/hermes-relay \
-  hermes-relay:latest
-
-# 5. Propagate the operator token to your operator profile
-mkdir -p ~/.hermes/profiles/collector
-cp .operator-token-test ~/.hermes/profiles/collector/.operator-token
-chmod 600 ~/.hermes/profiles/collector/.operator-token
-
-# 6. Point a user install at the relay
-hermes install --from you/hermes-dist --relay https://<host>.tail.ts.net:9119
+# 2. in a second terminal, run the enterprise client
+bash build.sh                       # -- or build.cmd on Windows cmd --
+dist/fake_webui.exe                 # (if a C compiler was present at build time)
 ```
 
-The relay runs on **this box**. No remote VPS, no public IP, no SSH bastion — Tailscale's WireGuard over DERP gives you a stable `100.x.x.x` + `<host>.tail.ts.net` for free. When you eventually move to a NAS or VPS, you only flip the DNS name; users' `gateway_config.json` is unchanged. See the `hermes-distribution-packaging` skill → **Tailscale-as-PC-relay** and **Migration PC → NAS via DNS entrypoint**.
-
----
-
-## What end users see
-
-The user clones your fork (or runs the Windows installer), executes `.onboard.sh` / `install-windows.ps1`, gets a UUID + opt-in prompt. If they opt in, their agent's `default` profile periodically sends signed events to the relay:
-
-- New skills they've written
-- Memories they mark `submit_to_collector: true`
-- Scripts that triggered the denylist (flagged, blocked from execution)
-- Diff of their per-profile `SOUL.md` / `config.yaml` (read-only audit trail)
-
-The operator (`you`) reviews submissions by launching the `collector` profile on this box:
+No compiler on the machine running the demo? The client is still shipped as
+source (`client/fake_webui.c`) plus build lines:
 
 ```bash
-hermes -p collector chat
-# "show me flagged scripts from the last 7 days"
-# "approve skill X for inclusion in main"
+gcc -O2 -o fake_webui.exe fake_webui.c -lws2_32     # MinGW
+cl  fake_webui.c ws2_32.lib                          # MSVC
 ```
 
----
-
-## Security model (one paragraph)
-
-Each user install has the `terminal` toolset disabled and a `pre-tool.sh` hook that re-checks every tool call against an allowlist at the shell layer (not config layer — prompt-injection-resistant). Scripts the user writes are scanned by `post-skill-create.sh` against a denylist of hermes-touching and exfiltration patterns. Flagged scripts are quarantined; clean ones run in the local `code_execution` sandbox. The relay only accepts HMAC-signed payloads from UUIDs that exist in the registry table. See [docs/SECURITY.md](docs/SECURITY.md) for the full threat model and [docs/RUNBOOK.md](docs/RUNBOOK.md) for incident response.
+The demo client runs against a real server in about 5 seconds, prints its
+console UI, and exits.
 
 ---
+
+## Architecture
+
+```
+ +----------------------------+        +---------------------------+
+ |  ENTERPRISE NETWORK        |        |  CLOUD (assumed)          |
+ |  (the "business" side)     |        |                           |
+ |                            |        |  server/fake_server.py    |
+ |  client/fake_webui.c       |  HTTP  |  GET  /health             |
+ |  single-file C UI          +------->+  GET  /ping               |
+ |  WinSock2, no deps         |        |  POST /events (handshake) |
+ |                            |        |  JSON in, JSON out        |
+ +----------------------------+        +---------------------------+
+           |                                        |
+           +---------- relay bridge boundary ------+
+                      (where a real deployment
+                       enforces auth + routing)
+```
+
+## Payload example
+
+A handshake event as sent by the C client:
+
+```json
+{
+  "type": "handshake",
+  "client": "fake-webui",
+  "client_version": "1.0",
+  "event": "client.connected"
+}
+```
+
+And the cloud side's confirmation (what the client prints in its status box):
+
+```json
+{
+  "status": "accepted",
+  "event_id": "evt-0001-3f9a21c4",
+  "received_at_utc": "2026-10-21T00:12:00+00:00",
+  "events_seen": 1,
+  "echo": { "type": "handshake", "client": "fake-webui", "client_version": "1.0", "event": "client.connected" }
+}
+```
+
+## Tech stack
+
+| Side       | Tech                               | Notes                                     |
+|------------|------------------------------------|-------------------------------------------|
+| Client     | C99, WinSock2 (`ws2_32`)           | Single file, zero third-party deps        |
+| Server     | Python 3.9+ stdlib (`http.server`) | No pip install needed                     |
+| Protocol   | HTTP/1.1, JSON payloads            | Plain-text on localhost for the demo      |
+| Package    | `build.sh` / `build.cmd` + zip     | `dist/relay-bridge-demo.zip`              |
 
 ## File layout
 
 ```
-hermes-dist/
-├── README.md                              this file
-├── CHANGELOG.md                           release notes (latest at top)
-├── .onboard.sh                            per-user first-launch script
-├── default-template/                      the user-facing profile bundle
-│   ├── profile.yaml
-│   ├── config.yaml
-│   ├── SOUL.md                            sanitized for distribution
-│   ├── hooks/
-│   │   ├── pre-tool.sh                    shell-layer tool allowlist
-│   │   ├── post-skill-create.sh           script denylist + quarantine
-│   │   └── post-memory-save.sh            marked-memory forwarder
-│   ├── security/
-│   │   ├── denylist.yaml                  script + URL + path patterns
-│   │   └── allowlist.yaml                 permitted tools + paths
-│   └── scripts/
-│       └── uuidgen.sh                     portable UUIDv4 generator
-├── install-windows.ps1                    Windows installer
-├── install-linux.sh                       Linux installer (NOTE: at v0.3.0 — see TODO below)
-├── install-macos.sh                       macOS installer (NOTE: at v0.3.0 — see TODO below)
-├── install-unix.sh                        legacy macOS/Linux installer (kept for reference)
-├── relay/                                 the FastAPI collector (runs locally on this PC)
-│   ├── app/
-│   │   ├── main.py                        entry point + 3 JSON-RPC handlers
-│   │   ├── hmac_auth.py                   HMAC signature verification
-│   │   ├── sqlite_store.py                per-user registry + audit log
-│   │   ├── capability_token.py            HMAC-signed per-user capability tokens
-│   │   ├── jsonrpc_handlers.py            skills read, tool invoke, docker run
-│   │   └── models.py                      pydantic schemas
-│   ├── deploy/                            historical — see SHIP.md for the current Tailscale flow
-│   ├── tests/
-│   │   ├── dry-run.sh                     builds the Docker image and runs the 4-case test suite;
-│   │   │                                  also writes the operator token to .operator-token-test
-│   │   └── fire-test-event.sh             standalone event signer for manual relay tests
-│   ├── Dockerfile
-│   └── requirements.txt
-└── docs/
-    ├── ARCHITECTURE.md                    4-layer model, threat tiers, BYO-agent modes
-    ├── SECURITY.md                        OWASP-LLM mapping + denylist rationale
-    ├── RUNBOOK.md                         incident response playbook
-    └── decisions/                         Architecture Decision Records (ADRs)
-        └── 0007-multi-tenant-hub.md       v0.5.0 architecture decision
+relay-bridge-demo/
+├── README.md                  this file
+├── LICENSE                    MIT (demo code)
+├── build.sh                   package script (Git-Bash/MSYS)
+├── build.cmd                  package script (Windows cmd)
+├── server/
+│   └── fake_server.py         the fake cloud side (Python stdlib only)
+├── client/
+│   └── fake_webui.c           the fake enterprise WebUI (C99 + WinSock2)
+└── legacy/
+    └── old-hermes-dist/       the original hermes-dist distribution content
 ```
-
-The `relay/deploy/deploy-oracle.sh` script is kept for reference (in case the operator later wants to provision a cloud VM) but the supported ship path is the Tailscale-on-this-PC flow described in [SHIP.md](SHIP.md) Stage 2-3.
-
----
-
-## Development branches
-
-| Branch | Purpose | Update cadence |
-|---|---|---|
-| `master` | **Stable.** Tagged releases only. What end users pull via `hermes update`. | On release tag |
-| `device/desktop` | This operator's working branch. Pushed daily from the operator's box. | Daily |
-| `remotes/origin/master` | The public Somewhatmilk fork's master — pinned to release tags. | On release tag |
-
-Active dev happens on `device/desktop`; PRs to `master` go through the `ship-pipeline` skill (see `skills/software-development/ship-pipeline/SKILL.md` for the 6-stage flow: plan → small diff → tic → verifier → review → tag).
-
----
-
-## Open work (next milestones)
-
-| Version | Status | What's missing |
-|---|---|---|
-| **v0.4.2** | open | `install-linux.sh` and `install-macos.sh` are at **v0.3.0** — need daily-update mechanism (systemd user timer on Linux, launchd on macOS) to match Windows. |
-| **v0.5.0-multi-tenant-hub** | WIP, 3 of 5 items shipped | Docker-as-a-Service is in stub mode — operator must implement namespace + mount enforcement. Tailscale ticket `t_98e1cb18` portable-paths still pending (351 A-class files via sed deferred pending SAMPLE-FIRST approval). |
-| **v0.5.1** | not started | Items 4-5 of v0.5.0 (operator-Hub README + install scripts for hub mode). |
-
-See [CHANGELOG.md](CHANGELOG.md) for completed work.
-
----
-
-## Contributing
-
-This is an operator-distribution fork. The core Hermes Agent lives at [Somewhatmilk/hermes-agent](https://github.com/Somewhatmilk/hermes-agent). For distribution-layer changes:
-
-1. Open an issue describing the operator need (e.g., "Linux installer needs systemd timer").
-2. Branch off `device/desktop` for the fix.
-3. Run the ship-pipeline (see `skills/software-development/ship-pipeline/`).
-4. PR against `master` once verifier passes.
-
-For security disclosures: see [docs/SECURITY.md](docs/SECURITY.md) § "Reporting vulnerabilities" — **do not** open public issues for security bugs.
-
----
 
 ## License
 
-Internal PoC. Do not redistribute `default-template/security/denylist.yaml` without the operator's sign-off — the denylist is the load-bearing security primitive and its visibility to attackers degrades its effectiveness. Other files in this repo are MIT-licensed unless noted otherwise; see individual file headers.
-
----
-
-## See also
-
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the 4-layer model in detail
-- [docs/SECURITY.md](docs/SECURITY.md) — threat model + denylist rationale
-- [docs/RUNBOOK.md](docs/RUNBOOK.md) — incident response playbook
-- [SHIP.md](SHIP.md) — operator's step-by-step ship guide
-- [Somewhatmilk/hermes-agent](https://github.com/Somewhatmilk/hermes-agent) — the upstream core
-- [Hermes Agent docs](https://hermes-agent.nousresearch.com/docs) — user-facing documentation
+MIT — see [LICENSE](LICENSE). Demo code only; the legacy `hermes-dist`
+content under `legacy/` keeps its original (internal PoC) terms.
