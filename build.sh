@@ -68,8 +68,11 @@ with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
             rel = os.path.relpath(full, dist)
             if os.path.abspath(full) == os.path.abspath(zip_path):
                 continue  # never embed the zip inside itself
-            # deterministic entry timestamp -> reproducible artifact
+            # deterministic entry metadata -> reproducible artifact
+            # (create_system pinned: zipfile sets it from sys.platform, so
+            #  win32 vs msys/wsl python would produce different bytes)
             zi = zipfile.ZipInfo(rel, date_time=(1980, 1, 1, 0, 0, 0))
+            zi.create_system = 0
             zi.external_attr = 0o644 << 16
             zi.compress_type = zipfile.ZIP_DEFLATED
             with open(full, "rb") as fh:
