@@ -1,5 +1,5 @@
 /*
- * fake_webui.c -- relay-bridge-demo CLIENT (a pretend enterprise WebUI, in C)
+ * client.c -- Aegis Relay CLIENT (an enterprise client UI, in C)
  *
  * The "business enterprise" half of the demo. A real enterprise app would be
  * a rich web/desktop client; this demo ships a single-file C program that does
@@ -11,10 +11,10 @@
  * Dependencies: plain WinSock2 (ws2_32). No libcurl, no JSON library, no
  * frameworks. Builds with MinGW gcc or MSVC cl:
  *
- *     gcc -O2 -o fake_webui.exe fake_webui.c -lws2_32
- *     cl  fake_webui.c ws2_32.lib
+ *     gcc -O2 -o client.exe client.c -lws2_32
+ *     cl  client.c ws2_32.lib
  *
- * Usage:   fake_webui.exe [host] [port]      (defaults 127.0.0.1 8765)
+ * Usage:   client.exe [host] [port]      (defaults 127.0.0.1 8765)
  */
 
 #define WIN32_LEAN_AND_MEAN
@@ -80,13 +80,13 @@ static char *http_request(const char *host, int port, const char *method,
         n = snprintf(req, sizeof(req),
                      "%s %s HTTP/1.1\r\nHost: %s:%d\r\n"
                      "Content-Type: application/json\r\n"
-                     "User-Agent: fake-webui/1.0 (enterprise-client demo)\r\n"
+                     "User-Agent: aegis-client/1.0 (enterprise-client)\r\n"
                      "Content-Length: %zu\r\nConnection: close\r\n\r\n%s",
                      method, path, host, port, strlen(body), body);
     } else {
         n = snprintf(req, sizeof(req),
                      "%s %s HTTP/1.1\r\nHost: %s:%d\r\n"
-                     "User-Agent: fake-webui/1.0 (enterprise-client demo)\r\n"
+                     "User-Agent: aegis-client/1.0 (enterprise-client)\r\n"
                      "Connection: close\r\n\r\n",
                      method, path, host, port);
     }
@@ -164,20 +164,20 @@ int main(int argc, char **argv) {
     double ms = 0.0;
 
     printf("\n");
-    printf("=== relay-bridge-demo : fake enterprise WebUI client (C) ===\n");
+    printf("=== Aegis Relay : enterprise client (C) ===\n");
     printf("    cloud endpoint : %s:%d\n\n", host, port);
 
     /* 1) handshake event -> cloud side */
     char body[512];
     snprintf(body, sizeof(body),
-             "{\"type\":\"handshake\",\"client\":\"fake-webui\","
+             "{\"type\":\"handshake\",\"client\":\"aegis-client\","
              "\"client_version\":\"1.0\",\"event\":\"client.connected\"}");
     char *r = http_post(host, port, "/events", body, &ms, err, sizeof(err));
     const char *status = "DISCONNECTED";
     if (r == NULL) {
         log_line("FAIL", "handshake  --", ms); /* ms may be undefined; keep simple */
         printf("  ! %s\n\n", err);
-        printf("  Is the fake cloud server running?  `python3 server/fake_server.py`\n\n");
+        printf("  Is the relay server running?  `python3 server/relay_server.py`\n\n");
         return 1;
     }
     log_line("OK  ", "handshake /events", ms);
@@ -204,7 +204,7 @@ int main(int argc, char **argv) {
 
     printf("\n+%s+\n", "---------------- relay bridge console -----------------------");
     printf("| %s\n", status);
-    printf("|  bridge         : fake_webui.exe (C) <-> relay bridge <-> fake cloud\n");
+    printf("|  bridge         : client.exe (C) <-> relay bridge <-> cloud side\n");
     printf("|  site id        : demo-enterprise-apac-01\n");
     printf("|  events sent    : 1 (handshake: client.connected)\n");
     printf("|  server reply   : %s\n", (r && strlen(r) < 300) ? r : "(see event log above)");
@@ -214,6 +214,6 @@ int main(int argc, char **argv) {
     if (p) { printf("  ping  : %s\n", p); free(p); }
     free(r);
     printf("\n  Demo complete: 1 handshake event delivered, %d probes answered.\n", (h && p) ? 2 : 0);
-    printf("  Next:  build.sh then run `dist/fake_webui.exe` -- see README.md.\n");
+    printf("  Next:  build.sh then run `dist/client.exe` -- see README.md.\n");
     return 0;
 }

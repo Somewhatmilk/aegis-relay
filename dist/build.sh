@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# build.sh -- package relay-bridge-demo into dist/ and zip it.
+# build.sh -- package aegis-relay into dist/ and zip it.
 # Usage:  bash build.sh     (on Windows: run under Git-Bash/MSYS; or use build.cmd)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST="$ROOT/dist"
-ZIP="$DIST/relay-bridge-demo.zip"
+ZIP="$DIST/aegis-relay.zip"
 
-echo "== relay-bridge-demo : build/package =="
+echo "== aegis-relay : build/package =="
 rm -rf "$DIST"
 mkdir -p "$DIST/client" "$DIST/server"
 
-# 1) server sources
-cp "$ROOT/server/fake_server.py" "$DIST/server/"
-echo "  [1/4] server/fake_server.py  -> dist/server/"
+# 1) server source
+cp "$ROOT/server/relay_server.py" "$DIST/server/"
+echo "  [1/4] server/relay_server.py  -> dist/server/"
 
-# 2) client sources (always ship source + build notes)
-cp "$ROOT/client/fake_webui.c" "$DIST/client/"
+# 2) client source (always ship source + build notes)
+cp "$ROOT/client/client.c" "$DIST/client/"
 cp "$ROOT/build.cmd" "$DIST/"
 cp "$ROOT/build.sh" "$DIST/"
 
@@ -24,23 +24,23 @@ cp "$ROOT/build.sh" "$DIST/"
 BIN=""
 if command -v gcc >/dev/null 2>&1; then
   echo "  [2/4] gcc found: compiling client..."
-  if gcc -O2 -o "$DIST/client/fake_webui.exe" "$ROOT/client/fake_webui.c" -lws2_32 2>"$DIST/client/build.log"; then
-    BIN=client/fake_webui.exe
+  if gcc -O2 -o "$DIST/client/client.exe" "$ROOT/client/client.c" -lws2_32 2>"$DIST/client/build.log"; then
+    BIN=client/client.exe
     echo "         compiled: dist/$BIN"
   else
     echo "         gcc failed (see dist/client/build.log) -- shipping source only"
   fi
 elif command -v cl >/dev/null 2>&1; then
   echo "  [2/4] MSVC cl found: compiling client..."
-  if cl /nologo /O2 "$ROOT/client/fake_webui.c" ws2_32.lib /Fe:"$DIST/client/fake_webui.exe" >"$DIST/client/build.log" 2>&1; then
-    BIN=client/fake_webui.exe
+  if cl /nologo /O2 "$ROOT/client/client.c" ws2_32.lib /Fe:"$DIST/client/client.exe" >"$DIST/client/build.log" 2>&1; then
+    BIN=client/client.exe
     echo "         compiled: dist/$BIN"
   else
     echo "         cl failed (see dist/client/build.log) -- shipping source only"
   fi
 else
   echo "  [2/4] no C compiler found on this host -- shipping source + build instructions"
-  echo "        build with:  gcc -O2 -o fake_webui.exe fake_webui.c -lws2_32"
+  echo "        build with:  gcc -O2 -o client.exe client.c -lws2_32"
 fi
 
 # 4) README + zip
@@ -66,6 +66,6 @@ with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
             print("   zip: %s" % rel)
     print("   wrote %s" % zip_path)
 PY
-echo "  [4/4] dist/relay-bridge-demo.zip created"
+echo "  [4/4] dist/aegis-relay.zip created"
 echo "== done =="
 ls -la "$DIST"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-relay-bridge-demo -- FAKE CLOUD SERVER (server side of the demo bridge)
+Aegis Relay -- CLOUD SIDE (server half of the relay bridge)
 
 A minimal, stdlib-only mock backend that stands in for the "cloud" side
 of the cloud-to-business-enterprise story. A real relay bridge would
@@ -11,7 +11,7 @@ this demo keeps exactly the three endpoints a viewer can poke:
     GET  /ping     -> round-trip probe, echoes server UTC time
     POST /events   -> accepts a client event, assigns an id, echoes status
 
-Run:  python3 server/fake_server.py  (default host 0.0.0.0, port 8765)
+Run:  python3 server/relay_server.py  (default host 0.0.0.0, port 8765)
 No third-party dependencies: Python 3.9+ standard library only.
 """
 
@@ -37,7 +37,7 @@ class FakeCloud(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("X-Relay-Bridge", "fake-cloud/1.0 (demo, no auth)")
+        self.send_header("X-Relay-Bridge", "aegis/1.0")
         self.end_headers()
         self.wfile.write(body)
 
@@ -48,8 +48,8 @@ class FakeCloud(BaseHTTPRequestHandler):
     def do_GET(self):  # /health, /ping
         if self.path.split("?")[0] == "/health":
             self._reply(200, {
-                "service": "relay-bridge-demo",
-                "role": "cloud-side fake server",
+                "service": "aegis-relay",
+                "role": "cloud side",
                 "status": "ok",
                 "uptime_s": round(time.time() - START, 1),
                 "events_seen": EVENT_COUNTER["n"],
@@ -87,7 +87,7 @@ class FakeCloud(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="relay-bridge-demo fake cloud server (stdlib only)")
+    ap = argparse.ArgumentParser(description="Aegis Relay cloud side (stdlib only)")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8765)
     args = ap.parse_args()
