@@ -59,7 +59,7 @@ command -v "$PY" >/dev/null 2>&1 || PY=python3
 command -v "$PY" >/dev/null 2>&1 || PY=py
 command -v "$PY" >/dev/null 2>&1 || { echo "error: no python/python3/py on PATH" >&2; exit 1; }
 "$PY" - "$PY_ZIP" "$PY_DIST" <<'PY'
-import sys, zipfile, os
+import sys, zipfile, os, time
 zip_path, dist = sys.argv[1], sys.argv[2]
 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
     for root, _, files in os.walk(dist):
@@ -68,7 +68,12 @@ with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
             rel = os.path.relpath(full, dist)
             if os.path.abspath(full) == os.path.abspath(zip_path):
                 continue  # never embed the zip inside itself
-            z.write(full, rel)
+            # deterministic entry timestamp -> reproducible artifact
+            zi = zipfile.ZipInfo(rel, date_time=(1980, 1, 1, 0, 0, 0))
+            zi.external_attr = 0o644 << 16
+            zi.compress_type = zipfile.ZIP_DEFLATED
+            with open(full, "rb") as fh:
+                z.writestr(zi, fh.read())
             print("   zip: %s" % rel)
     print("   wrote %s" % zip_path)
 PY

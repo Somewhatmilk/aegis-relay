@@ -43,7 +43,7 @@ where %PY% >nul 2>nul || (
   exit /b 1
 )
 
-%PY% -c "import zipfile,os; z=zipfile.ZipFile('dist\\aegis-relay.zip','w',zipfile.ZIP_DEFLATED); [z.write(os.path.join(r,f), os.path.relpath(os.path.join(r,f),'dist')) for r,_,fs in os.walk('dist') for f in fs]; z.close(); print('   wrote dist\\aegis-relay.zip')"
+%PY% -c "import zipfile,os; z=zipfile.ZipFile('dist\\aegis-relay.zip','w',zipfile.ZIP_DEFLATED); [z.writestr(zipfile.ZipInfo(os.path.relpath(os.path.join(r,f),'dist'), date_time=(1980,1,1,0,0,0)), open(os.path.join(r,f),'rb').read()) for r,_,fs in os.walk('dist') for f in fs]; z.close(); print('   wrote dist\\aegis-relay.zip')"
 echo == done ==
 dir dist
 endlocal
