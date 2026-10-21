@@ -22,21 +22,22 @@ cp "$ROOT/build.sh" "$DIST/"
 
 # 3) client binary -- only if a C compiler is present
 BIN=""
+LOG="${TMPDIR:-/tmp}/aegis-client-build.log"
 if command -v gcc >/dev/null 2>&1; then
   echo "  [2/4] gcc found: compiling client..."
-  if gcc -O2 -o "$DIST/client/client.exe" "$ROOT/client/client.c" -lws2_32 2>"$DIST/client/build.log"; then
+  if gcc -O2 -o "$DIST/client/client.exe" "$ROOT/client/client.c" -lws2_32 2>"$LOG"; then
     BIN=client/client.exe
     echo "         compiled: dist/$BIN"
   else
-    echo "         gcc failed (see dist/client/build.log) -- shipping source only"
+    echo "         gcc failed (see $LOG) -- shipping source only"
   fi
 elif command -v cl >/dev/null 2>&1; then
   echo "  [2/4] MSVC cl found: compiling client..."
-  if cl /nologo /O2 "$ROOT/client/client.c" ws2_32.lib /Fe:"$DIST/client/client.exe" >"$DIST/client/build.log" 2>&1; then
+  if cl /nologo /O2 "$ROOT/client/client.c" ws2_32.lib /Fe:"$DIST/client/client.exe" >"$LOG" 2>&1; then
     BIN=client/client.exe
     echo "         compiled: dist/$BIN"
   else
-    echo "         cl failed (see dist/client/build.log) -- shipping source only"
+    echo "         cl failed (see $LOG) -- shipping source only"
   fi
 else
   echo "  [2/4] no C compiler found on this host -- shipping source + build instructions"
@@ -52,7 +53,12 @@ if command -v cygpath >/dev/null 2>&1; then
 else
   PY_ZIP="$ZIP"; PY_DIST="$DIST"
 fi
-python - "$PY_ZIP" "$PY_DIST" <<'PY'
+# resolve a usable interpreter (bare `python` may be absent in subprocess PATH)
+PY=python
+command -v "$PY" >/dev/null 2>&1 || PY=python3
+command -v "$PY" >/dev/null 2>&1 || PY=py
+command -v "$PY" >/dev/null 2>&1 || { echo "error: no python/python3/py on PATH" >&2; exit 1; }
+"$PY" - "$PY_ZIP" "$PY_DIST" <<'PY'
 import sys, zipfile, os
 zip_path, dist = sys.argv[1], sys.argv[2]
 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
